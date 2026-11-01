@@ -1,0 +1,64 @@
+[tool.black]
+line-length = 120
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["renderer_client.RenderOptions"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["main.py", "miner"]
+
+[tool.poetry]
+name = "404-sft-miner"
+version = "0.1.0"
+description = ""
+authors = []
+readme = "README.md"
+packages = [{ include = "miner" }]
+
+[tool.poetry.dependencies]
+python = ">=3.13,<3.14"
+404-witness-client = { path = "../404-sdk/witness-client" }
+404-renderer-client = { path = "../404-sdk/renderer-client" }
+tlslite-ng = "==0.8.2"
+cryptography = "==50.0.2"
+httpx = "==0.28.1"
+websockets = "==17.2"
+bittensor-wallet = "==4.1.0"
+openai = "==3.29.0"
+pydantic = "==2.14.1"
+numpy = "==2.5.4"
+pillow = "==13.0.0"
+aiofiles = "==25.1.0"
+loguru = "0.7.3"
+
+[tool.poetry.group.dev.dependencies]
+types-aiofiles = "==25.1.0.20260518"
+poethepoet = "0.38.0"
+bandit = "1.9.2"
+black = "26.10.1"
+mypy = "2.4.0"
+ruff = "0.17.3"
+pytest = "*"
+
+[tool.poe.tasks.lint]
+help = "Run all linters and formatters"
+ignore_fail = "return_non_zero"
+sequence = [
+    { cmd = "ruff check --fix main.py miner" },
+    { cmd = "black main.py miner" },
+    { cmd = "bandit -rq -c pyproject.toml main.py miner" },
+    { cmd = "mypy" },
+]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
