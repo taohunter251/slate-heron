@@ -14,6 +14,7 @@ which send version C's (golden217's) refine turn (owner 30/10):
     pick     with 2+ accepted chain finals: Astra low scores them on the judge's 4 front views (lumen-kit's panel
              prompt and 0-10 penalty rubric, 384 px sheets); the lowest penalty wins; a tie, an unusable reply or a
              failed call -> the first chain
+    post     after the pick: Sol high, then Astra high told the measured colour of photo and render (rewrite.refine_content), kept when it renders
     fallback no accepted module in any chain -> the first chain's last module written (unchecked), else None
     finish   lumen-kit's final() (wrap + flat-object tilt) of the result, as version C (rewrite.finish: the final is
              rendered once, which lumen-kit does not do; a failure falls back to the plain wrap)
@@ -40,7 +41,7 @@ import re
 from loguru import logger
 from witness_client import AsyncWitnessClient, RenderOptions
 
-from miner import images, pipeline, rewrite
+from miner import colour, images, pipeline, rewrite
 from miner import rewrite_prompts as P
 from miner.rewrite import Calls, check, code_of, finish, first_module, image_part, refine_content, text_part
 
@@ -49,6 +50,8 @@ DRAFTS: tuple[tuple[str, str], ...] = ((pipeline.ASTRA, "medium"), (pipeline.MOD
 # The rewrites of every chain in order: (model, effort). Owner 30/10: the first on Sol high (was Astra medium).
 REWRITES: tuple[tuple[str, str], ...] = ((pipeline.MODEL, "high"), (pipeline.ASTRA, "high"))
 PICK_MODEL, PICK_EFFORT, PICK_MAX_OUTPUT = pipeline.ASTRA, "low", 8192
+POST_STAGES = ((pipeline.MODEL, 1, False), (pipeline.ASTRA, 2, True))  # refines after the pick: model, step of the refine text, colour line first
+POST_STEPS = 3
 
 
 def _views(pairs: tuple[tuple[float, float], ...], size: int) -> RenderOptions:
@@ -141,4 +144,23 @@ async def generate(image: bytes, seed: int, witness: AsyncWitnessClient) -> str 
         tried = next((m for m, _ in finals if m), None)
         return await finish(tried, witness, checked=False) if tried else None
     best = accepted[0] if len(accepted) == 1 else await pick(calls, photo, accepted)
+    grid, _ = await check(best, witness, rewrite.VIEWS)
+    for model, step, measured in POST_STAGES if grid is not None else ():
+        content = refine_content(step, POST_STEPS, photo, grid, best)
+        note = colour.line(image, grid) if measured else ""
+        if note:
+            content = [text_part(note), *content]
+        try:
+            text, incomplete = await calls.ask(content, "high", model)
+        except pipeline.ModelFailure as e:
+            logger.warning("post refine step {} call failed ({}), keeping the module so far", step, e)
+            break
+        if incomplete:
+            continue
+        cand = code_of(text)
+        new_grid, errors = await check(cand, witness, rewrite.VIEWS)
+        if new_grid is None:
+            logger.info("post refine step {} rejected ({}), dropped", step, errors[:1])
+            continue
+        best, grid = cand, new_grid
     return await finish(best, witness)
